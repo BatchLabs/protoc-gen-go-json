@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/mitchellh/protoc-gen-go-json/e2e/batch.com/myproto"
+	"github.com/BatchLabs/protoc-gen-go-json/e2e/batch.com/myproto"
 )
 
 func TestGen(t *testing.T) {
