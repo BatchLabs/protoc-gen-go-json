@@ -18,17 +18,18 @@ type Options struct {
 }
 
 // This function is called with a param which contains the entire definition of a method.
-func ApplyTemplate(w io.Writer, f *protogen.File, opts Options) error {
+func ApplyTemplate(w io.Writer, f *protogen.File, opts Options) (bool, error) {
 	if err := headerTemplate.Execute(w, tplHeader{
 		File: f,
 	}); err != nil {
-		return err
+		return false, err
 	}
 
 	return applyMessages(w, f.Messages, opts)
 }
 
-func applyMessages(w io.Writer, msgs []*protogen.Message, opts Options) error {
+func applyMessages(w io.Writer, msgs []*protogen.Message, opts Options) (bool, error) {
+	var applied bool
 	for _, m := range msgs {
 
 		if m.Desc.IsMapEntry() {
@@ -43,20 +44,26 @@ func applyMessages(w io.Writer, msgs []*protogen.Message, opts Options) error {
 				Message: m,
 				Options: opts,
 			}); err != nil {
-				return err
+				return false, err
 			}
+
+			applied = true
 
 		default:
 			glog.V(2).Infof("Skipping %s, mapentry message", m.GoIdent.GoName)
 			continue
 		}
 
-		if err := applyMessages(w, m.Messages, opts); err != nil {
-			return err
+		tmpApplied, err := applyMessages(w, m.Messages, opts)
+		if err != nil {
+			return false, err
+		}
+		if !applied {
+			applied = tmpApplied
 		}
 	}
 
-	return nil
+	return applied, nil
 }
 
 type tplHeader struct {

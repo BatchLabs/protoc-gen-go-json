@@ -44,11 +44,12 @@ func main() {
 
 			gf := gp.NewGeneratedFile(fmt.Sprintf("%s.pb.json.go", f.GeneratedFilenamePrefix), f.GoImportPath)
 
-			err := gen.ApplyTemplate(gf, f, opts)
+			applied, err := gen.ApplyTemplate(gf, f, opts)
 			if err != nil {
 				gf.Skip()
 				gp.Error(err)
-				continue
+			} else if !applied {
+				gf.Skip()
 			}
 		}
 
