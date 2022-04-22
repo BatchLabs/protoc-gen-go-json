@@ -2,6 +2,7 @@ package gen
 
 import (
 	"io"
+	"strings"
 	"text/template"
 
 	"github.com/golang/glog"
@@ -18,7 +19,6 @@ type Options struct {
 
 // This function is called with a param which contains the entire definition of a method.
 func ApplyTemplate(w io.Writer, f *protogen.File, opts Options) error {
-
 	if err := headerTemplate.Execute(w, tplHeader{
 		File: f,
 	}); err != nil {
@@ -36,18 +36,24 @@ func applyMessages(w io.Writer, msgs []*protogen.Message, opts Options) error {
 			continue
 		}
 
-		glog.V(2).Infof("Processing %s", m.GoIdent.GoName)
-		if err := messageTemplate.Execute(w, tplMessage{
-			Message: m,
-			Options: opts,
-		}); err != nil {
-			return err
+		switch {
+		case strings.HasPrefix(m.Comments.Leading.String(), "//go:marshal-as-uuid"):
+			glog.V(2).Infof("Processing %s, use UUID marshaling", m.GoIdent.GoName)
+			if err := uuidMessageTemplate.Execute(w, tplMessage{
+				Message: m,
+				Options: opts,
+			}); err != nil {
+				return err
+			}
+
+		default:
+			glog.V(2).Infof("Skipping %s, mapentry message", m.GoIdent.GoName)
+			continue
 		}
 
 		if err := applyMessages(w, m.Messages, opts); err != nil {
 			return err
 		}
-
 	}
 
 	return nil
@@ -70,25 +76,34 @@ var (
 package {{.GoPackageName}}
 
 import (
-	"google.golang.org/protobuf/encoding/protojson"
+	"encoding/json"
 )
 `))
 
-	messageTemplate = template.Must(template.New("message").Parse(`
+	uuidMessageTemplate = template.Must(template.New("message").Parse(`
 // MarshalJSON implements json.Marshaler
 func (msg *{{.GoIdent.GoName}}) MarshalJSON() ([]byte,error) {
-	return protojson.MarshalOptions {
-		UseEnumNumbers: {{.EnumsAsInts}},
-		EmitUnpopulated: {{.EmitDefaults}},
-		UseProtoNames: {{.OrigName}},
-	}.Marshal(msg)
+	var buf [38]byte
+	buf[0] = '"'
+	buf[len(buf)-1] = '"'
+
+	view := buf[1 : len(buf)-1]
+
+	var offsets = [...]int{0, 2, 4, 6, 9, 11, 14, 16, 19, 21, 24, 26, 28, 30, 32, 34}
+	const hexString = "0123456789abcdef"
+
+	for i, b := range msg.Data {
+		view[offsets[i]] = hexString[b>>4]
+		view[offsets[i]+1] = hexString[b&0xF]
+	}
+	view[8] = '-'
+	view[13] = '-'
+	view[18] = '-'
+	view[23] = '-'
+
+	return buf[:], nil
 }
 
-// UnmarshalJSON implements json.Unmarshaler
-func (msg *{{.GoIdent.GoName}}) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions {
-		DiscardUnknown: {{.AllowUnknownFields}},
-	}.Unmarshal(b, msg)
-}
+var _ json.Marshaler = (*{{.GoIdent.GoName}})(nil)
 `))
 )
