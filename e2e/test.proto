@@ -1,0 +1,9 @@
+syntax            = "proto3";
+option go_package = "batch.com/myproto";
+
+package myproto;
+
+//go:marshal-as-uuid
+message UUID {
+  bytes data = 1;
+}
